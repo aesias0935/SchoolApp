@@ -1,98 +1,172 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import React from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  // 예시 데이터 (나중에 DB나 상태관리로 연결할 부분입니다)
+  const goalProgress = 0.65; // 65% 달성
+  const currentClass = "마이크로프로세서 응용 (3교시)";
+  const timeLeft = "18분 남음";
+  const nextClass = "취업 역량 강화 특강 (4교시)";
+  
+  const todos = [
+    { id: '1', title: 'CNC 밀링 실습 보고서 제출', done: true },
+    { id: '2', title: '방과후 자율학습 신청하기', done: false },
+    { id: '3', title: '전공 자격증 기출문제 1회 풀기', done: false },
+  ];
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  return (
+    <ScrollView style={styles.container}>
+      {/* 1. 상단: 목표 달성률 프로그레스 바 */}
+      <View style={styles.card}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.cardTitle}>오늘의 목표 달성률</Text>
+          <Text style={styles.percentText}>{Math.round(goalProgress * 100)}%</Text>
+        </View>
+        <View style={styles.progressBarBackground}>
+          <View style={[styles.progressBarFill, { width: `${goalProgress * 100}%` }]} />
+        </View>
+      </View>
+
+      {/* 2. 중앙: 현재 시간표 & 남은 시간 / 다음 시간표 */}
+      <View style={styles.highlightCard}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.badge}>실시간 진행 중</Text>
+          <Text style={styles.timeLeftText}>{timeLeft}</Text>
+        </View>
+        <Text style={styles.currentClassText}>{currentClass}</Text>
+        <View style={styles.divider} />
+        <Text style={styles.nextClassLabel}>다음 수업</Text>
+        <Text style={styles.nextClassText}>{nextClass}</Text>
+      </View>
+
+      {/* 3. 하단: 오늘 할 일 (To-Do List) */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>오늘의 할 일 리스트</Text>
+        {todos.map((item) => (
+          <View key={item.id} style={styles.todoItem}>
+            <Ionicons 
+              name={item.done ? "checkbox" : "square-outline"} 
+              size={22} 
+              color={item.done ? "#34C759" : "#8E8E93"} 
+            />
+            <Text style={[styles.todoText, item.done && styles.todoDoneText]}>
+              {item.title}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
+// 스타일링 (애플 감성의 깔끔한 여백과 둥근 모서리)
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#F2F2F7',
+    padding: 16,
+  },
+  card: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  highlightCard: {
+    backgroundColor: '#007AFF',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 12,
+  },
+  percentText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#007AFF',
+  },
+  progressBarBackground: {
+    height: 10,
+    backgroundColor: '#E5E5EA',
+    borderRadius: 5,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 5,
+  },
+  badge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    color: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    overflow: 'hidden',
+  },
+  timeLeftText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  currentClassText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginVertical: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    marginVertical: 12,
+  },
+  nextClassLabel: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 12,
+  },
+  nextClassText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  todoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingVertical: 8,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  todoText: {
+    marginLeft: 12,
+    fontSize: 15,
+    color: '#3A3A3C',
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  todoDoneText: {
+    textDecorationLine: 'line-through',
+    color: '#8E8E93',
   },
 });
