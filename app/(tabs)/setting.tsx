@@ -162,7 +162,7 @@ export default function SettingScreen() {
       <View style={styles.card}>
         
         {/* 이름 입력 */}
-        <Text style={styles.label}>이름 (닉네임)</Text>
+        <Text style={styles.label}>이름</Text>
         <TextInput
           style={styles.input}
           value={name}
