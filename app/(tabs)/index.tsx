@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 // 종례 및 수업 시간표 기준 정의
 const PERIOD_TIMES = [
@@ -24,29 +24,44 @@ export default function HomeScreen() {
   // 목표 관련 상태
   const [dailyTodos, setDailyTodos] = useState<any[]>([]);
   const [newDailyText, setNewDailyText] = useState('');
+  
   const [longTermGoals, setLongTermGoals] = useState<any[]>([]);
   const [newLongTermText, setNewLongTermText] = useState('');
-  const [activeModal, setActiveModal] = useState<'daily' | 'longterm' | null>(null);
 
   // 실시간 타이머 및 현재/다음 교시 상태
   const [statusTitle, setStatusTitle] = useState('수업 시간이 아닙니다');
   const [statusTimer, setStatusTimer] = useState('');
   const [nextSubjectInfo, setNextSubjectInfo] = useState('');
 
+  // 다가오는 일정 상태
+  const [nextEvent, setNextEvent] = useState<{ dateStr: string; title: string } | null>(null);
+
+  // 화면에 들어올 때 데이터 로드
   useFocusEffect(
     useCallback(() => {
       loadUserDataAndCheckDate();
+      loadNextEvent();
     }, [])
   );
 
   const loadUserDataAndCheckDate = async () => {
     try {
       const savedSchool = await AsyncStorage.getItem('@school_name');
-      const savedGradeClass = await AsyncStorage.getItem('@grade_class');
+      const savedGrade = await AsyncStorage.getItem('@grade');
+      const savedClassNum = await AsyncStorage.getItem('@class_num');
+      const savedMajor = await AsyncStorage.getItem('@major');
       const savedName = await AsyncStorage.getItem('@user_name');
       
       if (savedSchool) setSchool(savedSchool);
-      if (savedGradeClass) setGradeClass(savedGradeClass);
+      
+      if (savedGrade && savedClassNum) {
+        const cleanGrade = savedGrade.replace(/[^0-9]/g, '');
+        const cleanClass = savedClassNum.replace(/[^0-9]/g, '');
+        const cleanMajor = savedMajor ? savedMajor.replace(/[()]/g, '') : '소프트웨어과';
+
+        setGradeClass(`${cleanGrade}학년 ${cleanClass}반 (${cleanMajor})`);
+      }
+
       if (savedName) setUserName(savedName);
 
       const todayStr = new Date().toISOString().split('T')[0];
@@ -76,6 +91,34 @@ export default function HomeScreen() {
     }
   };
 
+  // 가장 가까운 다가오는 일정 불러오기 함수
+  const loadNextEvent = async () => {
+    try {
+      const now = new Date();
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      
+      const savedEvents = await AsyncStorage.getItem('@calendar_events');
+      if (savedEvents) {
+        const eventsMap: Record<string, string[]> = JSON.parse(savedEvents);
+        const futureDates = Object.keys(eventsMap)
+          .filter((dateStr) => dateStr >= todayStr)
+          .sort();
+
+        if (futureDates.length > 0) {
+          const nearestDate = futureDates[0];
+          const titles = eventsMap[nearestDate];
+          if (titles && titles.length > 0) {
+            setNextEvent({ dateStr: nearestDate, title: titles[0] });
+            return;
+          }
+        }
+      }
+      setNextEvent(null);
+    } catch (e) {
+      console.log('일정 불러오기 실패', e);
+    }
+  };
+
   // 실시간 타이머 및 현재/다음 교시 계산 (1초마다 갱신)
   useEffect(() => {
     const updateTimerAndSchedule = async () => {
@@ -95,14 +138,9 @@ export default function HomeScreen() {
       const dayMap: Record<number, string> = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금' };
       const currentDayStr = dayMap[dayIndex];
 
-      // 저장된 이번주 시간표 가져오기
       const savedSchedule = await AsyncStorage.getItem('@current_week_schedule');
       const scheduleMap = savedSchedule ? JSON.parse(savedSchedule) : {
-        '월': ['전공기초실습', '전공기초실습', '프로그래밍', '프로그래밍', '수학', '영어', '체육'],
-        '화': ['자료구조', '자료구조', '운영체제', '운영체제', '국어', '한국사', '창체'],
-        '수': ['웹프로그래밍', '웹프로그래밍', '데이터베이스', '데이터베이스', '영어', '수학', '미술'],
-        '목': ['모바일앱개발', '모바일앱개발', '네트워크보안', '네트워크보안', '국어', '과학', '음악'],
-        '금': ['프로젝트실습', '프로젝트실습', '프로젝트실습', '취업역량강화', '진로', '동아리', '동아리'],
+        '월': [], '화': [], '수': [], '목': [], '금': []
       };
 
       const subjects = scheduleMap[currentDayStr] || [];
@@ -125,7 +163,6 @@ export default function HomeScreen() {
           foundTitle = `🔥 현재 ${p.period}교시 (${currentSubName})`;
           foundTimer = `종료까지 ${leftMin}분 남음`;
 
-          // 다음 교시 정보
           if (i < subjects.length - 1) {
             nextSub = `다음: ${i + 2}교시 (${subjects[i + 1]})`;
           } else {
@@ -156,7 +193,6 @@ export default function HomeScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  // 목표 조작 헬퍼 함수들
   const saveDailyToStorage = async (newTodos: typeof dailyTodos) => {
     setDailyTodos(newTodos);
     await AsyncStorage.setItem('@daily_todos', JSON.stringify(newTodos));
@@ -214,14 +250,16 @@ export default function HomeScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       
       {/* 상단 헤더 */}
-      <View style={styles.headerRow}>
+      <View style={styles.headerContainer}>
         <Text style={styles.headerTitle}>{userName} 님의 홈</Text>
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{school} · {gradeClass}</Text>
+          <Text style={styles.badgeText} numberOfLines={1} ellipsizeMode="tail">
+            {school} · {gradeClass}
+          </Text>
         </View>
       </View>
 
-      {/* 1. 실시간 교시 및 남은 시간 카드 (메인 강조) */}
+      {/* 1. 실시간 교시 및 남은 시간 카드 */}
       <View style={styles.liveCard}>
         <Text style={styles.liveTitle}>{statusTitle}</Text>
         {statusTimer !== '' && <Text style={styles.liveTimer}>{statusTimer}</Text>}
@@ -234,12 +272,12 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      {/* 2. 전체 장기 목표 요약 카드 */}
-      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => setActiveModal('longterm')}>
+      {/* 2. 전체 장기 목표 달성률 요약 카드 */}
+      <View style={styles.card}>
         <View style={styles.rowBetween}>
           <View>
             <Text style={styles.cardTitle}>🎯 전체 장기 목표 달성률</Text>
-            <Text style={styles.cardSubText}>터치하여 자격증 및 취업 목표 관리</Text>
+            <Text style={styles.cardSubText}>자격증 및 취업 목표 요약</Text>
           </View>
           <Text style={[styles.percentText, { color: '#34C759' }]}>{longTermPercent}%</Text>
         </View>
@@ -247,79 +285,115 @@ export default function HomeScreen() {
           <View style={[styles.progressBarFill, { width: `${longTermPercent}%`, backgroundColor: '#34C759' }]} />
         </View>
         <Text style={styles.previewText}>달성한 목표: {longTermGoals.filter(i => i.completed).length} / {longTermGoals.length}개</Text>
-      </TouchableOpacity>
+      </View>
 
-      {/* 3. 오늘 하루 목표 요약 카드 */}
-      <TouchableOpacity style={styles.card} activeOpacity={0.8} onPress={() => setActiveModal('daily')}>
+      {/* 3. 오늘 하루 목표 달성률 요약 카드 */}
+      <View style={styles.card}>
         <View style={styles.rowBetween}>
           <View>
             <Text style={styles.cardTitle}>📅 오늘 하루 목표 달성률</Text>
-            <Text style={styles.cardSubText}>터치하여 상세 관리 및 추가하기</Text>
+            <Text style={styles.cardSubText}>오늘 완료한 할일 요약</Text>
           </View>
           <Text style={styles.percentText}>{dailyPercent}%</Text>
         </View>
         <View style={styles.progressBarBackground}>
           <View style={[styles.progressBarFill, { width: `${dailyPercent}%` }]} />
         </View>
-        <Text style={styles.previewText}>완료된 항목: {dailyTodos.filter(i => i.completed).length} / {dailyTodos.length}개 (매일 자정 초기화)</Text>
-      </TouchableOpacity>
+        <Text style={styles.previewText}>완료된 항목: {dailyTodos.filter(i => i.completed).length} / {dailyTodos.length}개</Text>
+      </View>
 
-      {/* 팝업 모달창 (목표 관리) */}
-      <Modal visible={activeModal !== null} transparent={true} animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {activeModal === 'daily' ? '📅 오늘 하루 목표 상세 관리' : '🎯 전체 장기 목표 상세 관리'}
-            </Text>
-            
-            <ScrollView style={styles.modalListContainer}>
-              {(activeModal === 'daily' ? dailyTodos : longTermGoals).map(item => (
-                <View key={item.id} style={styles.todoRowItem}>
-                  <TouchableOpacity 
-                    style={styles.todoMainTouch} 
-                    onPress={() => activeModal === 'daily' ? toggleDailyTodo(item.id) : toggleLongTermGoal(item.id)}
-                  >
-                    <View style={[
-                      styles.checkbox, 
-                      item.completed && (activeModal === 'daily' ? styles.checkboxChecked : styles.checkboxCheckedGreen)
-                    ]}>
-                      {item.completed && <Text style={styles.checkmark}>✓</Text>}
-                    </View>
-                    <Text style={[styles.todoText, item.completed && styles.todoTextCompleted]}>{item.text}</Text>
-                  </TouchableOpacity>
+      {/* 4. 📌 가장 가까운 일정 카드 */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>📌 다가오는 일정</Text>
+        {nextEvent ? (
+          <View style={styles.eventInfoBox}>
+            <Text style={styles.eventDate}>{nextEvent.dateStr}</Text>
+            <Text style={styles.eventText}>{nextEvent.title}</Text>
+          </View>
+        ) : (
+          <Text style={styles.noEventText}>등록된 다가오는 일정이 없습니다.</Text>
+        )}
+      </View>
 
-                  <TouchableOpacity 
-                    style={styles.deleteButton} 
-                    onPress={() => activeModal === 'daily' ? deleteDailyTodo(item.id) : deleteLongTermGoal(item.id)}
-                  >
-                    <Text style={styles.deleteButtonText}>삭제</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </ScrollView>
+      {/* 5. 📝 오늘 하루 할 일 상세 리스트 섹션 */}
+      <View style={styles.sectionContainer}>
+        <Text style={styles.sectionHeaderTitle}>📝 오늘 하루 할 일 관리</Text>
+        
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            value={newDailyText}
+            onChangeText={setNewDailyText}
+            placeholder="새로운 하루 목표 입력"
+            placeholderTextColor="#8E8E93"
+          />
+          <TouchableOpacity style={styles.addButton} onPress={addDailyTodo}>
+            <Text style={styles.addButtonText}>추가</Text>
+          </TouchableOpacity>
+        </View>
 
-            <View style={styles.inputRow}>
-              <TextInput
-                style={styles.input}
-                value={activeModal === 'daily' ? newDailyText : newLongTermText}
-                onChangeText={activeModal === 'daily' ? setNewDailyText : setNewLongTermText}
-                placeholder={activeModal === 'daily' ? '새로운 하루 목표 입력' : '새로운 장기 목표 입력'}
-                placeholderTextColor="#8E8E93"
-              />
+        {dailyTodos.length === 0 ? (
+          <Text style={styles.noEventText}>등록된 오늘 할 일이 없습니다.</Text>
+        ) : (
+          dailyTodos.map(item => (
+            <View key={item.id} style={styles.todoRowItem}>
               <TouchableOpacity 
-                style={[styles.addButton, activeModal === 'longterm' && { backgroundColor: '#34C759' }]} 
-                onPress={activeModal === 'daily' ? addDailyTodo : addLongTermGoal}
+                style={styles.todoMainTouch} 
+                onPress={() => toggleDailyTodo(item.id)}
               >
-                <Text style={styles.addButtonText}>추가</Text>
+                <View style={[styles.checkbox, item.completed && styles.checkboxChecked]}>
+                  {item.completed && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={[styles.todoText, item.completed && styles.todoTextCompleted]}>{item.text}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.deleteButton} onPress={() => deleteDailyTodo(item.id)}>
+                <Text style={styles.deleteButtonText}>삭제</Text>
               </TouchableOpacity>
             </View>
+          ))
+        )}
+      </View>
 
-            <TouchableOpacity style={styles.closeButton} onPress={() => setActiveModal(null)}>
-              <Text style={styles.closeButtonText}>닫기</Text>
-            </TouchableOpacity>
-          </View>
+      {/* 6. 🎯 장기 목표 상세 리스트 섹션 */}
+      <View style={[styles.sectionContainer, { marginTop: 10 }]}>
+        <Text style={styles.sectionHeaderTitle}>🎯 전체 장기 목표 관리</Text>
+        
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            value={newLongTermText}
+            onChangeText={setNewLongTermText}
+            placeholder="새로운 장기 목표 입력"
+            placeholderTextColor="#8E8E93"
+          />
+          <TouchableOpacity style={[styles.addButton, { backgroundColor: '#34C759' }]} onPress={addLongTermGoal}>
+            <Text style={styles.addButtonText}>추가</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+
+        {longTermGoals.length === 0 ? (
+          <Text style={styles.noEventText}>등록된 장기 목표가 없습니다.</Text>
+        ) : (
+          longTermGoals.map(item => (
+            <View key={item.id} style={styles.todoRowItem}>
+              <TouchableOpacity 
+                style={styles.todoMainTouch} 
+                onPress={() => toggleLongTermGoal(item.id)}
+              >
+                <View style={[styles.checkbox, item.completed && styles.checkboxCheckedGreen]}>
+                  {item.completed && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+                <Text style={[styles.todoText, item.completed && styles.todoTextCompleted]}>{item.text}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.deleteButton} onPress={() => deleteLongTermGoal(item.id)}>
+                <Text style={styles.deleteButtonText}>삭제</Text>
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+      </View>
 
     </ScrollView>
   );
@@ -328,10 +402,30 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   contentContainer: { padding: 20, paddingBottom: 40 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 10 },
-  headerTitle: { fontSize: 22, fontWeight: '800', color: '#1C1C1E' },
-  badge: { backgroundColor: '#E5E5EA', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-  badgeText: { fontSize: 12, fontWeight: '600', color: '#3A3A3C' },
+  
+  headerContainer: {
+    marginBottom: 16,
+    marginTop: 10,
+  },
+  headerTitle: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    color: '#1C1C1E', 
+    marginBottom: 6 
+  },
+  badge: { 
+    backgroundColor: '#E5E5EA', 
+    paddingHorizontal: 10, 
+    paddingVertical: 6, 
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+  },
+  badgeText: { 
+    fontSize: 12, 
+    fontWeight: '600', 
+    color: '#3A3A3C' 
+  },
   
   liveCard: {
     backgroundColor: '#1C1C1E',
@@ -370,11 +464,42 @@ const styles = StyleSheet.create({
   progressBarFill: { height: '100%', backgroundColor: '#007AFF', borderRadius: 4 },
   previewText: { fontSize: 13, color: '#8E8E93', fontWeight: '500' },
   
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '70%' },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1C1C1E', marginBottom: 16, textAlign: 'center' },
-  modalListContainer: { maxHeight: 250, marginBottom: 15 },
-  todoRowItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
+  eventInfoBox: {
+    backgroundColor: '#E8F2FF',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 6,
+  },
+  eventDate: { fontSize: 12, fontWeight: '600', color: '#007AFF', marginBottom: 4 },
+  eventText: { fontSize: 16, fontWeight: '700', color: '#1C1C1E' },
+  noEventText: { fontSize: 14, color: '#8E8E93', textAlign: 'center', marginVertical: 10 },
+
+  // 하단 리스트 및 관리 섹션 스타일
+  sectionContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  sectionHeaderTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#1C1C1E',
+    marginBottom: 14,
+  },
+  todoRowItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingVertical: 10, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F2F2F7' 
+  },
   todoMainTouch: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: '#C7C7CC', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   checkboxChecked: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
@@ -388,6 +513,4 @@ const styles = StyleSheet.create({
   input: { flex: 1, backgroundColor: '#F2F2F7', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, fontSize: 14, color: '#1C1C1E', marginRight: 8 },
   addButton: { backgroundColor: '#007AFF', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   addButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  closeButton: { backgroundColor: '#E5E5EA', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 5 },
-  closeButtonText: { fontSize: 15, fontWeight: '700', color: '#3A3A3C' },
 });

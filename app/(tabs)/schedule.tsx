@@ -1,188 +1,178 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const DAYS = ['월', '화', '수', '목', '금'];
 
 export default function ScheduleScreen() {
-  const [weekType, setWeekType] = useState<'current' | 'next'>('current'); // 이번주 / 다음주 선택
+  const router = useRouter();
+
+  // 학교 및 학년/반 정보 상태
+  const [schoolInfo, setSchoolInfo] = useState({
+    school: '수원하이텍마이스터고등학교',
+    grade: '2',
+    classNum: '8',
+    major: '전기전자제어과',
+  });
+
+  // 이번주 요일 탭 상태 ('월', '화', '수', '목', '금')
   const [selectedDay, setSelectedDay] = useState('월');
-  
-  // 이번주 시간표 데이터 & 다음주 시간표 데이터 상태 분리
-  const [currentWeekSchedule, setCurrentWeekSchedule] = useState<Record<string, string[]>>({
-    '월': [], '화': [], '수': [], '목': [], '금': []
-  });
-  const [nextWeekSchedule, setNextWeekSchedule] = useState<Record<string, string[]>>({
+
+  // 요일별 시간표 데이터 상태
+  const [scheduleMap, setScheduleMap] = useState<Record<string, string[]>>({
     '월': [], '화': [], '수': [], '목': [], '금': []
   });
 
-  // 수정 모달 상태
-  const [modalVisible, setModalVisible] = useState(false);
-  const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [editText, setEditText] = useState('');
-
+  // 1. 저장된 사용자 정보 및 NEIS 시간표 불러오기
+// 화면에 진입할 때마다(설정 변경 후 돌아올 때 포함) 사용자 정보와 시간표를 새로 불러옴
   useFocusEffect(
     useCallback(() => {
-      loadSchedules();
+      loadInfoAndSchedule();
     }, [])
   );
-
-  const loadSchedules = async () => {
+const loadInfoAndSchedule = async () => {
     try {
-      // 1. 이번주 시간표 로드
-      const savedCurrent = await AsyncStorage.getItem('@current_week_schedule');
-      if (savedCurrent) {
-        setCurrentWeekSchedule(JSON.parse(savedCurrent));
-      } else {
-        const defaultSched = {
-          '월': ['전공기초실습', '전공기초실습', '프로그래밍', '프로그래밍', '수학', '영어', '체육'],
-          '화': ['자료구조', '자료구조', '운영체제', '운영체제', '국어', '한국사', '창체'],
-          '수': ['웹프로그래밍', '웹프로그래밍', '데이터베이스', '데이터베이스', '영어', '수학', '미술'],
-          '목': ['모바일앱개발', '모바일앱개발', '네트워크보안', '네트워크보안', '국어', '과학', '음악'],
-          '금': ['프로젝트실습', '프로젝트실습', '프로젝트실습', '취업역량강화', '진로', '동아리', '동아리'],
-        };
-        setCurrentWeekSchedule(defaultSched);
-        await AsyncStorage.setItem('@current_week_schedule', JSON.stringify(defaultSched));
-      }
+      const savedSchool = await AsyncStorage.getItem('@school_name');
+      const savedGrade = await AsyncStorage.getItem('@grade');
+      const savedClassNum = await AsyncStorage.getItem('@class_num');
+      const savedMajor = await AsyncStorage.getItem('@major');
 
-      // 2. 다음주 시간표 로드
-      const savedNext = await AsyncStorage.getItem('@next_week_schedule');
-      if (savedNext) {
-        setNextWeekSchedule(JSON.parse(savedNext));
-      } else {
-        const defaultNextSched = {
-          '월': ['소프트웨어공학', '소프트웨어공학', '알고리즘', '알고리즘', '수학', '영어', '자율'],
-          '화': ['네트워크', '네트워크', '임베디드시스', '임베디드시스', '국어', '사회', '창체'],
-          '수': ['응용프로그래밍', '응용프로그래밍', '빅데이터기초', '빅데이터기초', '영어', '수학', '체육'],
-          '목': ['클라우드컴퓨팅', '클라우드컴퓨팅', '정보보안', '정보보안', '국어', '과학', '음악'],
-          '금': ['캡스톤디자인', '캡스톤디자인', '캡스톤디자인', '취업특강', '진로', '동아리', '동아리'],
-        };
-        setNextWeekSchedule(defaultNextSched);
-        await AsyncStorage.setItem('@next_week_schedule', JSON.stringify(defaultNextSched));
-      }
+      const gradeClean = savedGrade ? savedGrade.replace(/[^0-9]/g, '') : '2';
+      const classClean = savedClassNum ? savedClassNum.replace(/[^0-9]/g, '') : '8';
+      const majorClean = savedMajor ? savedMajor.replace(/[()]/g, '') : '전기전자제어과';
+      const schoolClean = savedSchool || '수원하이텍마이스터고등학교';
+
+      setSchoolInfo({
+        school: schoolClean,
+        grade: gradeClean,
+        classNum: classClean,
+        major: majorClean,
+      });
+
+      // 💡 핵심: 학년이나 반이 바뀔 수 있으므로, 캐시를 바로 쓰기보다 
+      // 최신 학년/반 정보로 NEIS API를 강제로 다시 호출해서 덮어씌우는 것이 안전합니다.
+      await fetchNeisSchedule(gradeClean, classClean);
+
     } catch (e) {
-      console.log('시간표 로드 실패');
+      console.log('시간표 초기화 실패:', e);
+    }
+  };
+  // 2. NEIS API 호출 및 파싱 함수
+  const fetchNeisSchedule = async (grade: string, classNum: string) => {
+    try {
+      // TODO: 교육청 코드 및 학교 코드가 정해져 있다면 아래에 입력하세요.
+      // 기본값 예시: 경기도교육청 (J10), 수원하이텍마이스터고 (7530756 등)
+      // 표준 개방 포털 인증키가 있다면 KEY 파라미터에 넣을 수 있습니다 (없으면 샘플키 'sample' 사용 가능)
+      const ATPT_OFCDC_SC_CODE = 'J10'; // 경기도교육청 예시
+      const SD_SCHUL_CODE = '7530756';   // 학교 코드 예시
+      const currentYear = new Date().getFullYear().toString();
+
+      const url = `https://open.neis.go.kr/hub/hiTimetable?KEY=sample&Type=json&ATPT_OFCDC_SC_CODE=${ATPT_OFCDC_SC_CODE}&SD_SCHUL_CODE=${SD_SCHUL_CODE}&AY=${currentYear}&SEM=1&GRADE=${grade}&CLASS_NM=${classNum}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data && data.hiTimetable) {
+        const rows = data.hiTimetable[1].row;
+        const newMap = parseNeisSchedule(rows);
+
+        setScheduleMap(newMap);
+        await AsyncStorage.setItem('@current_week_schedule', JSON.stringify(newMap));
+      }
+    } catch (error) {
+      console.log('NEIS API 연동 실패 (오프라인 모드 또는 인증키 확인 필요):', error);
     }
   };
 
-  // 수정 모달 오픈
-  const openEditModal = (index: number, currentSubject: string) => {
-    setEditIndex(index);
-    setEditText(currentSubject);
-    setModalVisible(true);
+  // 3. NEIS 낱개 데이터를 요일별/교시별 배열로 변환하는 파서
+  const parseNeisSchedule = (rows: any[]) => {
+    const map: Record<string, string[]> = { '월': [], '화': [], '수': [], '목': [], '금': [] };
+    
+    rows.forEach(row => {
+      const ymd = row.ALL_TI_YMD; // 예: "20260608"
+      if (!ymd) return;
+      const year = parseInt(ymd.substring(0, 4));
+      const month = parseInt(ymd.substring(4, 6)) - 1;
+      const day = parseInt(ymd.substring(6, 8));
+      
+      const dateObj = new Date(year, month, day);
+      const dayIndex = dateObj.getDay(); // 1: 월 ~ 5: 금
+      const dayMapName: Record<number, string> = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금' };
+      const targetDayStr = dayMapName[dayIndex];
+      
+      if (targetDayStr) {
+        const periodNum = parseInt(row.PERIO) - 1; // 1교시 -> 인덱스 0
+        if (!map[targetDayStr]) map[targetDayStr] = [];
+        map[targetDayStr][periodNum] = row.ITRT_CNTNT; // 과목명
+      }
+    });
+
+    // 1~7교시 빈 칸 메우기
+    Object.keys(map).forEach(day => {
+      for (let i = 0; i < 7; i++) {
+        if (!map[day][i]) {
+          map[day][i] = '수업 없음';
+        }
+      }
+    });
+
+    return map;
   };
 
-  // 과목 저장
-  const saveSubject = async () => {
-    if (editIndex === null) return;
-
-    if (weekType === 'current') {
-      const updatedList = [...(currentWeekSchedule[selectedDay] || [])];
-      updatedList[editIndex] = editText;
-      const newMap = { ...currentWeekSchedule, [selectedDay]: updatedList };
-      setCurrentWeekSchedule(newMap);
-      await AsyncStorage.setItem('@current_week_schedule', JSON.stringify(newMap));
-    } else {
-      const updatedList = [...(nextWeekSchedule[selectedDay] || [])];
-      updatedList[editIndex] = editText;
-      const newMap = { ...nextWeekSchedule, [selectedDay]: updatedList };
-      setNextWeekSchedule(newMap);
-      await AsyncStorage.setItem('@next_week_schedule', JSON.stringify(newMap));
-    }
-
-    setModalVisible(false);
-    Alert.alert('완료', '시간표가 수정되었습니다.');
-  };
-
-  const activeScheduleMap = weekType === 'current' ? currentWeekSchedule : nextWeekSchedule;
-  const currentSubjects = activeScheduleMap[selectedDay] || [];
+  const currentSubjects = scheduleMap[selectedDay] || [];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       
-      {/* 상단 타이틀 */}
-      <View style={styles.headerCard}>
-        <Text style={styles.headerTitle}>🏫 전체 학교 시간표</Text>
-        <Text style={styles.headerSub}>수원하이텍마이스터고등학교</Text>
+      {/* 상단 타이틀 및 뒤로가기 */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backButton}>〈 홈으로</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>전체 시간표</Text>
+        <View style={{ width: 50 }} />
       </View>
 
-      {/* 이번주 / 다음주 선택 탭 */}
-      <View style={styles.weekTabRow}>
-        <TouchableOpacity 
-          style={[styles.weekTabButton, weekType === 'current' && styles.weekTabActive]}
-          onPress={() => setWeekType('current')}
-        >
-          <Text style={[styles.weekTabText, weekType === 'current' && styles.weekTabTextActive]}>이번주 시간표</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={[styles.weekTabButton, weekType === 'next' && styles.weekTabActive]}
-          onPress={() => setWeekType('next')}
-        >
-          <Text style={[styles.weekTabText, weekType === 'next' && styles.weekTabTextActive]}>다음주 시간표</Text>
-        </TouchableOpacity>
+      {/* 학교 정보 카드 */}
+      <View style={styles.infoCard}>
+        <Text style={styles.infoCardTitle}>🏫 학교 시간표 실시간 연동</Text>
+        <Text style={styles.infoCardSub}>
+          {schoolInfo.school} {schoolInfo.grade}학년 {schoolInfo.classNum}반 ({schoolInfo.major})
+        </Text>
       </View>
 
-      {/* 요일 선택 탭 (월~금) */}
-      <View style={styles.dayTabRow}>
-        {DAYS.map(day => (
+      {/* 요일 탭 버튼 (월~금) */}
+      <View style={styles.dayTabContainer}>
+        {['월', '화', '수', '목', '금'].map(day => (
           <TouchableOpacity
             key={day}
-            style={[styles.dayButton, selectedDay === day && styles.dayButtonActive]}
+            style={[styles.dayTab, selectedDay === day && styles.dayTabActive]}
             onPress={() => setSelectedDay(day)}
           >
-            <Text style={[styles.dayButtonText, selectedDay === day && styles.dayButtonTextActive]}>
+            <Text style={[styles.dayTabText, selectedDay === day && styles.dayTabTextActive]}>
               {day}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {/* 선택한 주/요일의 시간표 리스트 */}
+      {/* 선택된 요일의 시간표 리스트 */}
       <View style={styles.scheduleCard}>
-        <Text style={styles.tableTitle}>
-          {weekType === 'current' ? '📌 이번주' : '📌 다음주'} {selectedDay}요일 과목 (터치하여 수정)
-        </Text>
+        <Text style={styles.scheduleCardHeader}>📌 이번주 {selectedDay}요일 시간표</Text>
         
-        {currentSubjects.map((subject, index) => (
-          <TouchableOpacity 
-            key={index} 
-            style={styles.periodRow}
-            onPress={() => openEditModal(index, subject)}
-          >
-            <View style={styles.periodBadge}>
-              <Text style={styles.periodBadgeText}>{index + 1}교시</Text>
+        {currentSubjects.length === 0 ? (
+          <Text style={styles.emptyText}>등록된 시간표 정보가 없습니다.</Text>
+        ) : (
+          currentSubjects.map((subject, index) => (
+            <View key={index} style={styles.periodRow}>
+              <View style={styles.periodBadge}>
+                <Text style={styles.periodBadgeText}>{index + 1}교시</Text>
+              </View>
+              <Text style={styles.subjectText}>{subject}</Text>
             </View>
-            <Text style={styles.subjectText}>{subject || '공강'}</Text>
-            <Text style={styles.editText}>수정</Text>
-          </TouchableOpacity>
-        ))}
+          ))
+        )}
       </View>
-
-      {/* 과목 수정 모달 */}
-      <Modal visible={modalVisible} transparent={true} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{editIndex !== null ? `${editIndex + 1}교시 과목 수정` : ''}</Text>
-            <TextInput
-              style={styles.input}
-              value={editText}
-              onChangeText={setEditText}
-              placeholder="과목명을 입력하세요"
-              placeholderTextColor="#8E8E93"
-            />
-            <View style={styles.modalButtonRow}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setModalVisible(false)}>
-                <Text style={styles.cancelButtonText}>취소</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={saveSubject}>
-                <Text style={styles.confirmButtonText}>저장</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
     </ScrollView>
   );
@@ -191,104 +181,25 @@ export default function ScheduleScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F2F2F7' },
   contentContainer: { padding: 20, paddingBottom: 40 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 10 },
+  backButton: { fontSize: 16, fontWeight: '600', color: '#007AFF' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#1C1C1E' },
   
-  headerCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#1C1C1E', marginBottom: 4 },
-  headerSub: { fontSize: 13, color: '#8E8E93', fontWeight: '600' },
+  infoCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, marginBottom: 16, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  infoCardTitle: { fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 4 },
+  infoCardSub: { fontSize: 13, color: '#8E8E93', fontWeight: '500' },
 
-  weekTabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#E5E5EA',
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-  },
-  weekTabButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 10,
-  },
-  weekTabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  weekTabText: { fontSize: 14, fontWeight: '700', color: '#8E8E93' },
-  weekTabTextActive: { color: '#1C1C1E' },
-  
-  dayTabRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  dayButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginHorizontal: 3,
-    borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  dayButtonActive: { backgroundColor: '#007AFF' },
-  dayButtonText: { fontSize: 15, fontWeight: '700', color: '#3A3A3C' },
-  dayButtonTextActive: { color: '#FFFFFF' },
-  
-  scheduleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  tableTitle: { fontSize: 13, fontWeight: '700', color: '#8E8E93', marginBottom: 14 },
-  periodRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F2F2F7',
-  },
-  periodBadge: {
-    backgroundColor: '#E5E5EA',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginRight: 12,
-  },
-  periodBadgeText: { fontSize: 12, fontWeight: '700', color: '#3A3A3C' },
+  dayTabContainer: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+  dayTab: { flex: 1, backgroundColor: '#E5E5EA', paddingVertical: 12, alignItems: 'center', marginHorizontal: 4, borderRadius: 12 },
+  dayTabActive: { backgroundColor: '#007AFF' },
+  dayTabText: { fontSize: 15, fontWeight: '600', color: '#3A3A3C' },
+  dayTabTextActive: { color: '#FFFFFF' },
+
+  scheduleCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6, elevation: 2 },
+  scheduleCardHeader: { fontSize: 15, fontWeight: '700', color: '#1C1C1E', marginBottom: 14 },
+  periodRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F2F2F7' },
+  periodBadge: { backgroundColor: '#E5E5EA', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginRight: 14 },
+  periodBadgeText: { fontSize: 13, fontWeight: '700', color: '#3A3A3C' },
   subjectText: { fontSize: 15, fontWeight: '600', color: '#1C1C1E', flex: 1 },
-  editText: { fontSize: 13, color: '#007AFF', fontWeight: '600' },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, width: '100%', maxWidth: 340 },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#1C1C1E', marginBottom: 15, textAlign: 'center' },
-  input: { backgroundColor: '#F2F2F7', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 10, fontSize: 16, color: '#1C1C1E', marginBottom: 20 },
-  modalButtonRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  cancelButton: { flex: 1, backgroundColor: '#E5E5EA', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginRight: 6 },
-  cancelButtonText: { fontSize: 15, fontWeight: '600', color: '#3A3A3C' },
-  confirmButton: { flex: 1, backgroundColor: '#007AFF', paddingVertical: 12, borderRadius: 10, alignItems: 'center', marginLeft: 6 },
-  confirmButtonText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  emptyText: { textAlign: 'center', color: '#8E8E93', paddingVertical: 20, fontSize: 14 },
 });
