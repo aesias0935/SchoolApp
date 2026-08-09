@@ -24,6 +24,13 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
+      - name: Patch Storyboard SDK Version
+        run: |
+          # SplashScreen.storyboard 내 하드코딩된 iOS 18.1 요구사항을 16.0으로 패치
+          find ios -name "*.storyboard" -exec sed -i '' 's/version="18.1"/version="16.0"/g' {} +
+          find ios -name "*.storyboard" -exec sed -i '' 's/targetRuntime="iOS.CocoaTouch.18.1"/targetRuntime="iOS.CocoaTouch"/g' {} +
+          find ios -name "*.storyboard" -exec sed -i '' 's/18.1/16.0/g' {} +
+
       - name: Install Pods
         run: |
           cd ios
@@ -74,7 +81,6 @@ jobs:
           rm -rf Payload app-unsigned.ipa
           mkdir -p Payload
 
-          # .xcarchive 내/외부에서 생성된 SchoolApp.app 동적 검색
           ARCHIVE_APP=$(find ios -name "SchoolApp.app" -type d | grep -i "xcarchive" | head -n 1)
 
           if [ -z "$ARCHIVE_APP" ]; then
@@ -83,16 +89,13 @@ jobs:
 
           if [ -z "$ARCHIVE_APP" ]; then
             echo "❌ ERROR: Archived SchoolApp.app not found!"
-            ls -la ios/build || true
             exit 1
           fi
 
           echo "✅ Found App Bundle at: $ARCHIVE_APP"
 
-          # 1. App 패키지 복사
           cp -R "$ARCHIVE_APP" Payload/
 
-          # 2. Info.plist 내부 변수 최종 정리 (Sideloadly 인식 불가 문제 방지)
           PLIST_FILE="Payload/SchoolApp.app/Info.plist"
           if [ -f "$PLIST_FILE" ]; then
             plutil -replace CFBundleIdentifier -string "com.aesias.SchoolApp" "$PLIST_FILE"
@@ -102,7 +105,6 @@ jobs:
             plutil -replace CFBundlePackageType -string "APPL" "$PLIST_FILE" 2>/dev/null || true
           fi
 
-          # 3. IPA 압축
           zip -r app-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
