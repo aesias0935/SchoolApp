@@ -59,9 +59,10 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
+                     COMPILER_INDEX_STORE_ENABLE=NO \
                      archive | tee xcodebuild.log || {
-                       echo "==================== BUILD ERROR LOG ===================="
-                       grep -i -C 3 "error:" xcodebuild.log | tail -n 40
+                       echo "==================== LAST BUILD LOGS ===================="
+                       tail -n 120 xcodebuild.log
                        exit 1
                      }
 
