@@ -32,6 +32,7 @@ jobs:
 
       - name: Disable Code Signing for Pods
         run: |
+          sudo gem install xcodeproj
           ruby -r xcodeproj -e '
             project = Xcodeproj::Project.open("ios/Pods/Pods.xcodeproj")
             project.targets.each do |target|
@@ -43,19 +44,22 @@ jobs:
             project.save
           '
 
-      - name: Build Unsigned App
+      - name: Build Unsigned Archive
         run: |
           cd ios
+          set -o pipefail
           xcodebuild -workspace SchoolApp.xcworkspace \
                      -scheme SchoolApp \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath output \
+                     -archivePath output/SchoolApp.xcarchive \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      PROVISIONING_PROFILE_SPECIFIER="" \
-                     build | tee xcodebuild.log || {
+                     DEVELOPMENT_TEAM="" \
+                     CODE_SIGN_STYLE=Manual \
+                     archive | tee xcodebuild.log || {
                        echo "==================== BUILD ERROR LOG ===================="
                        grep -i -C 3 "error:" xcodebuild.log | tail -n 40
                        exit 1
@@ -64,7 +68,7 @@ jobs:
       - name: Package Unsigned IPA
         run: |
           mkdir -p Payload
-          cp -r ios/output/Build/Products/Release-iphoneos/*.app Payload/
+          cp -r ios/output/SchoolApp.xcarchive/Products/Applications/*.app Payload/
           zip -r app-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
