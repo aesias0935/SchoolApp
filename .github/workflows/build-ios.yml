@@ -6,23 +6,17 @@ on:
 jobs:
   build:
     runs-on: macos-14
-    env:
-      LANG: en_US.UTF-8
-      LC_ALL: en_US.UTF-8
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Xcode 15.4
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: '15.4'
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Install Dependencies
-        run: npm install
+        run: npm ci || npm install
 
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
@@ -59,7 +53,6 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
-                     COMPILER_INDEX_STORE_ENABLE=NO \
                      archive | tee xcodebuild.log || {
                        echo "==================== LAST BUILD LOGS ===================="
                        tail -n 120 xcodebuild.log
