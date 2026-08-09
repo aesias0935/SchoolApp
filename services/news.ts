@@ -35,7 +35,6 @@ export const getAISelectedNews = async () => {
     return Array.isArray(selectedNews) ? selectedNews : [];
 
   } catch (error: any) {
-    // 상세 에러 내용을 콘솔에 상세히 출력
     console.error('🔥 news.ts 상세 에러 원인:', error?.message || error);
     return [];
   }
