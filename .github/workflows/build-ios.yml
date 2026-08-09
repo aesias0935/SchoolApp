@@ -27,38 +27,25 @@ jobs:
       - name: Install Pods
         run: npx pod-install ios
 
-      - name: Align Deployment Targets & Disable Code Signing
+      - name: Disable Code Signing for Pods
         run: |
           sudo gem install xcodeproj
           ruby -r xcodeproj -e '
-            ["ios/SchoolApp.xcodeproj", "ios/Pods/Pods.xcodeproj"].each do |path|
-              next unless File.exist?(path)
-              project = Xcodeproj::Project.open(path)
-              project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
-                  config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-                  config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.0"
-                end
+            project = Xcodeproj::Project.open("ios/Pods/Pods.xcodeproj")
+            project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+                config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
               end
-              project.save
             end
-          '
-
-      - name: Patch Storyboard Version Conflicts
-        run: |
-          ruby -e '
-            Dir.glob("ios/**/*.storyboard").each do |f|
-              content = File.read(f, encoding: "UTF-8")
-              new_content = content.gsub("18.1", "16.0")
-              File.write(f, new_content)
-            end
+            project.save
           '
 
       - name: Build Unsigned App
         run: |
           cd ios
-          set -o pipefail
+          export NODE_BINARY=$(which node)
+          
           xcodebuild -workspace SchoolApp.xcworkspace \
                      -scheme SchoolApp \
                      -configuration Release \
@@ -71,7 +58,6 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
-                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
                      build
 
       - name: Package Unsigned IPA
