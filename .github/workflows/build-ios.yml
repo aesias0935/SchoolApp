@@ -52,7 +52,7 @@ jobs:
                      -scheme SchoolApp \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath build \
+                     -derivedDataPath "$(pwd)/build" \
                      -destination 'generic/platform=iOS' \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
@@ -73,17 +73,17 @@ jobs:
           rm -rf Payload app-unsigned.ipa
           mkdir -p Payload
 
-          # Find valid .app containing Info.plist
-          APP_PATH=""
-          for app in $(find ios/build -name "*.app" -type d); do
-            if [ -f "$app/Info.plist" ]; then
-              APP_PATH="$app"
-              break
-            fi
-          done
-          
+          # ios 폴더 및 시스템 DerivedData 전체에서 SchoolApp.app 검색
+          APP_PATH=$(find ios -name "SchoolApp.app" -type d | head -n 1)
+
           if [ -z "$APP_PATH" ]; then
-            echo "❌ ERROR: Valid .app bundle with Info.plist was not found!"
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "SchoolApp.app" -type d | head -n 1)
+          fi
+
+          if [ -z "$APP_PATH" ] || [ ! -f "$APP_PATH/Info.plist" ]; then
+            echo "❌ ERROR: SchoolApp.app containing Info.plist was not found!"
+            echo "Searching all .app directories:"
+            find ios ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null || true
             exit 1
           fi
 
