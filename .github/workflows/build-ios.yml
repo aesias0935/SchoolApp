@@ -13,19 +13,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install CocoaPods
-        run: sudo gem install cocoapods
-
-      - name: Install Node Dependencies
+      - name: Install Dependencies
         run: npm install
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform ios --clean --no-install
-
-      - name: Install iOS Pods
-        run: |
-          cd ios
-          pod install
+        run: npx expo prebuild --platform ios --clean
 
       - name: Build Xcode Archive
         run: |
@@ -33,12 +25,12 @@ jobs:
           xcodebuild -workspace SchoolApp.xcworkspace \
                      -scheme SchoolApp \
                      -configuration Release \
-                     -sdk iphoneos \
+                     -destination 'generic/platform=iOS' \
                      -archivePath build/App.xcarchive \
                      archive \
-                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGN_IDENTITY="" \
                      CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY=""
+                     CODE_SIGNING_ALLOWED=NO
 
       - name: Package Unsigned IPA
         run: |
