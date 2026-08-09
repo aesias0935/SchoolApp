@@ -1,5 +1,3 @@
-# .github/workflows/build-ios.yml
-
 name: Build Unsigned iOS IPA
 
 on:
@@ -15,6 +13,12 @@ jobs:
       - name: Select Xcode 16.1
         run: sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
 
+      # iOS 18.1 Platform SDK 직접 다운로드 및 설치 (정석 해결책)
+      - name: Download iOS 18.1 Platform SDK
+        run: |
+          echo "⬇️ Downloading iOS 18.1 Platform SDK..."
+          sudo xcodebuild -downloadPlatform iOS || true
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -25,23 +29,6 @@ jobs:
 
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
-
-      - name: Fix Deployment Target & Storyboard SDK Lock
-        run: |
-          # 1. Xcode 프로젝트 타깃 버전을 iOS 16.0으로 강제 통일
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' ios/SchoolApp.xcodeproj/project.pbxproj
-          
-          # 2. 스토리보드 XML 내의 iOS 18.1 SDK 타깃 지정 구문 완전 제거
-          python3 -c '
-          import glob, re
-          for path in glob.glob("ios/**/*.storyboard", recursive=True):
-              with open(path, "r", encoding="utf-8") as f:
-                  content = f.read()
-              content = re.sub(r"targetRuntime=\"[^\"]+\"", "targetRuntime=\"iOS.CocoaTouch\"", content)
-              content = content.replace("18.1", "16.0")
-              with open(path, "w", encoding="utf-8") as f:
-                  f.write(content)
-          '
 
       - name: Install Pods
         run: |
@@ -57,7 +44,6 @@ jobs:
               target.build_configurations.each do |config|
                 config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
                 config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.0"
               end
             end
             project.save
@@ -74,7 +60,6 @@ jobs:
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath "$(pwd)/build/SchoolApp.xcarchive" \
-                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
