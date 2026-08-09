@@ -6,6 +6,9 @@ on:
 jobs:
   build:
     runs-on: macos-14
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
     steps:
       - uses: actions/checkout@v4
 
@@ -19,15 +22,14 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
+      - name: Install Pods
+        run: npx pod-install ios
+
       - name: Build Xcode Archive
         run: |
           cd ios
-          WORKSPACE=$(ls -d *.xcworkspace | head -n 1)
-          SCHEME=$(xcodebuild -list -workspace "$WORKSPACE" | awk '/Schemes:/{flag=1; next} /^[[:space:]]*$/{flag=0} flag' | xargs | awk '{print $1}')
-          echo "Found Workspace: $WORKSPACE"
-          echo "Found Scheme: $SCHEME"
-          xcodebuild -workspace "$WORKSPACE" \
-                     -scheme "$SCHEME" \
+          xcodebuild -workspace SchoolApp.xcworkspace \
+                     -scheme SchoolApp \
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath build/App.xcarchive \
