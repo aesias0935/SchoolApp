@@ -24,6 +24,26 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
+      - name: Fix Storyboard & Project iOS 18.1 Target (Ruby Patch)
+        run: |
+          ruby -e '
+            # Fix all storyboard files
+            Dir.glob("ios/**/*.storyboard").each do |f|
+              content = File.read(f, encoding: "UTF-8")
+              new_content = content.gsub("18.1", "16.0").gsub(/targetVersion="[0-9.]*"/, "targetVersion=\"16.0\"")
+              File.write(f, new_content)
+              puts "Patched Storyboard: #{f}"
+            end
+
+            # Fix pbxproj files
+            Dir.glob("ios/**/*.pbxproj").each do |f|
+              content = File.read(f, encoding: "UTF-8")
+              new_content = content.gsub("18.1", "16.0").gsub(/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/, "IPHONEOS_DEPLOYMENT_TARGET = 16.0")
+              File.write(f, new_content)
+              puts "Patched Project: #{f}"
+            end
+          '
+
       - name: Install Pods
         run: npx pod-install ios
 
@@ -36,6 +56,7 @@ jobs:
               target.build_configurations.each do |config|
                 config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
                 config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.0"
               end
             end
             project.save
@@ -57,6 +78,8 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
+                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
+                     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS=NO \
                      build | tee xcodebuild.log
 
       - name: Package Unsigned IPA
