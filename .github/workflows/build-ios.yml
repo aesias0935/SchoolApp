@@ -1,3 +1,5 @@
+# .github/workflows/build-ios.yml
+
 name: Build Unsigned iOS IPA
 
 on:
@@ -24,42 +26,22 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
-      - name: Overwrite Storyboard with Universal Clean XML
+      - name: Fix Deployment Target & Storyboard SDK Lock
         run: |
-          # SDK 18.1 의존성이 제거된 표준 스플래시 스토리보드로 파일 전체 덮어쓰기
-          SPLASH_PATH=$(find ios -name "SplashScreen.storyboard" | head -n 1)
-          if [ -n "$SPLASH_PATH" ]; then
-            echo "🔧 Overwriting $SPLASH_PATH with SDK-agnostic universal XML..."
-            cat << 'EOF' > "$SPLASH_PATH"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21701" systemVersion="22A380" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="EXPO-VIEWCONTROLLER-1">
-              <device id="retina6_12" orientation="portrait" appearance="light"/>
-              <dependencies>
-                  <deployment identifier="iOS"/>
-                  <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="21678"/>
-                  <capability name="Safe area layout guides" minToolsVersion="9.0"/>
-                  <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
-              </dependencies>
-              <scenes>
-                  <scene sceneID="EXPO-SCENE-1">
-                      <objects>
-                          <viewController storyboardIdentifier="SplashScreenViewController" id="EXPO-VIEWCONTROLLER-1" sceneMemberDrawingMenu="never" instantiateFirstResponder="false" viewControllerKey="EXPO-VIEWCONTROLLER-1" customClass="SplashScreenViewController" customModule="SchoolApp" customModuleProvider="target">
-                              <view key="view" contentMode="scaleToFill" id="EXPO-VIEW-1">
-                                  <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
-                                  <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                                  <viewLayoutGuide key="safeArea" id="EXPO-SAFEAREA-1"/>
-                                  <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-                              </view>
-                          </viewController>
-                          <placeholder placeholderIdentifier="IBFirstResponder" id="EXPO-PLACEHOLDER-1" userLabel="First Responder" sceneMemberID="firstResponder"/>
-                      </objects>
-                      <point key="canvasLocation" x="0.0" y="0.0"/>
-                  </scene>
-              </scenes>
-          </document>
-          EOF
-            echo "✅ Storyboard successfully replaced."
-          fi
+          # 1. Xcode 프로젝트 타깃 버전을 iOS 16.0으로 강제 통일
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' ios/SchoolApp.xcodeproj/project.pbxproj
+          
+          # 2. 스토리보드 XML 내의 iOS 18.1 SDK 타깃 지정 구문 완전 제거
+          python3 -c '
+          import glob, re
+          for path in glob.glob("ios/**/*.storyboard", recursive=True):
+              with open(path, "r", encoding="utf-8") as f:
+                  content = f.read()
+              content = re.sub(r"targetRuntime=\"[^\"]+\"", "targetRuntime=\"iOS.CocoaTouch\"", content)
+              content = content.replace("18.1", "16.0")
+              with open(path, "w", encoding="utf-8") as f:
+                  f.write(content)
+          '
 
       - name: Install Pods
         run: |
@@ -75,6 +57,7 @@ jobs:
               target.build_configurations.each do |config|
                 config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
                 config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.0"
               end
             end
             project.save
@@ -91,6 +74,7 @@ jobs:
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath "$(pwd)/build/SchoolApp.xcarchive" \
+                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
@@ -121,8 +105,6 @@ jobs:
             echo "❌ ERROR: Archived SchoolApp.app not found!"
             exit 1
           fi
-
-          echo "✅ Found App Bundle at: $ARCHIVE_APP"
 
           cp -R "$ARCHIVE_APP" Payload/
 
