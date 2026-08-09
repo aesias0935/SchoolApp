@@ -5,13 +5,10 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Select Xcode 16.1
-        run: sudo xcode-select -s /Applications/Xcode_16.1.app
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,37 +21,21 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
-      - name: Patch Storyboard & Project Deployment Target
-        run: |
-          ruby -e '
-            # Fix Storyboard SDK requirement
-            Dir.glob("ios/**/*.storyboard").each do |f|
-              content = File.read(f)
-              new_content = content.gsub("18.1", "16.0")
-              File.write(f, new_content)
-              puts "Patched: #{f}"
-            end
-          '
-
       - name: Install Pods
         run: npx pod-install ios
 
-      - name: Disable Code Signing and Force Target iOS 16.0
+      - name: Disable Code Signing for Pods
         run: |
           sudo gem install xcodeproj
           ruby -r xcodeproj -e '
-            ["ios/SchoolApp.xcodeproj", "ios/Pods/Pods.xcodeproj"].each do |proj_path|
-              next unless File.exist?(proj_path)
-              project = Xcodeproj::Project.open(proj_path)
-              project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
-                  config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-                  config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.0"
-                end
+            project = Xcodeproj::Project.open("ios/Pods/Pods.xcodeproj")
+            project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+                config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
               end
-              project.save
             end
+            project.save
           '
 
       - name: Build Unsigned App
@@ -73,7 +54,6 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
-                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
                      build 2>&1 | tee xcodebuild.log || {
                        echo "### ❌ Xcode Build Error Logs" >> $GITHUB_STEP_SUMMARY
                        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
