@@ -43,24 +43,24 @@ jobs:
             project.save
           '
 
-      - name: Build Unsigned App
+      - name: Archive Unsigned App (Proper Build)
         run: |
           cd ios
           export NODE_BINARY=$(which node)
           
+          # xcodebuild archive 명령으로 Info.plist 변수 치환 및 바이너리 컴파일을 정식 완료
           xcodebuild -workspace SchoolApp.xcworkspace \
                      -scheme SchoolApp \
                      -configuration Release \
                      -sdk iphoneos \
-                     -derivedDataPath "$(pwd)/build" \
-                     -destination 'generic/platform=iOS' \
+                     -archivePath "$(pwd)/build/SchoolApp.xcarchive" \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
-                     build 2>&1 | tee xcodebuild.log || {
+                     archive 2>&1 | tee xcodebuild.log || {
                        echo "### ❌ Xcode Build Log (Errors)" >> $GITHUB_STEP_SUMMARY
                        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                        grep -E "error:|BUILD FAILED" xcodebuild.log | head -n 30 >> $GITHUB_STEP_SUMMARY
@@ -68,39 +68,34 @@ jobs:
                        exit 1
                      }
 
-      - name: Package Unsigned IPA
+      - name: Package Unsigned IPA from Archive
         run: |
           rm -rf Payload app-unsigned.ipa
           mkdir -p Payload
 
-          APP_PATH=$(find ios -name "SchoolApp.app" -type d | head -n 1)
+          ARCHIVE_APP="ios/build/SchoolApp.xcarchive/Products/Applications/SchoolApp.app"
 
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ ERROR: SchoolApp.app directory was not found!"
+          if [ ! -d "$ARCHIVE_APP" ]; then
+            echo "❌ ERROR: Archived SchoolApp.app not found!"
             exit 1
           fi
 
-          echo "✅ Found App bundle at: $APP_PATH"
+          echo "✅ Found perfectly processed App Bundle at: $ARCHIVE_APP"
 
-          # Info.plist가 없으면 복사
-          if [ ! -f "$APP_PATH/Info.plist" ]; then
-            PLIST_SRC=$(find ios -name "Info.plist" | grep -v "Pods" | head -n 1)
-            if [ -n "$PLIST_SRC" ]; then
-              cp "$PLIST_SRC" "$APP_PATH/Info.plist"
-            fi
-          fi
+          # 1. Archive 내부 정식 App 복사
+          cp -R "$ARCHIVE_APP" Payload/
 
-          # CFBundleIdentifier 변수를 실제 Bundle ID로 강제 치환 (Sideloadly 오류 해결)
-          PLIST_FILE="$APP_PATH/Info.plist"
+          # 2. Info.plist 내부 키값 정제 (Sideloadly 호환성 보장)
+          PLIST_FILE="Payload/SchoolApp.app/Info.plist"
           if [ -f "$PLIST_FILE" ]; then
-            echo "🔧 Fixing CFBundleIdentifier in Info.plist..."
             plutil -replace CFBundleIdentifier -string "com.aesias.SchoolApp" "$PLIST_FILE"
-            plutil -replace CFBundleExecutable -string "SchoolApp" "$PLIST_FILE" 2>/dev/null || true
-            plutil -replace CFBundleName -string "SchoolApp" "$PLIST_FILE" 2>/dev/null || true
-            echo "✅ BundleIdentifier set to: com.aesias.SchoolApp"
+            plutil -replace CFBundleExecutable -string "SchoolApp" "$PLIST_FILE"
+            plutil -replace CFBundleName -string "SchoolApp" "$PLIST_FILE"
+            plutil -replace CFBundleDisplayName -string "SchoolApp" "$PLIST_FILE" 2>/dev/null || true
+            plutil -replace CFBundlePackageType -string "APPL" "$PLIST_FILE" 2>/dev/null || true
           fi
 
-          cp -R "$APP_PATH" Payload/
+          # 3. IPA 압축
           zip -r app-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
