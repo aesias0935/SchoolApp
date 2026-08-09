@@ -10,8 +10,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.0
-        run: sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+      - name: Select Xcode 16.1
+        run: sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,18 +24,17 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
-      - name: Patch Storyboard Metadata
+      - name: Patch Storyboard SDK Lock
         run: |
-          # SplashScreen.storyboard 내부의 Xcode 18.1 메타데이터 세척
+          # Xcode 16.1에서 iOS 18.1 SDK 충돌이 나지 않도록 스토리보드 타깃 런타임 세척
           python3 -c '
           import glob, re
           for path in glob.glob("ios/**/*.storyboard", recursive=True):
               with open(path, "r") as f:
                   content = f.read()
-              content = re.sub(r"version=\"18\.1\"", "version=\"16.0\"", content)
-              content = re.sub(r"18\.1", "16.0", content)
-              content = re.sub(r"toolsVersion=\"[^\"]+\"", "toolsVersion=\"22000\"", content)
-              content = re.sub(r"plugInVersion=\"[^\"]+\"", "plugInVersion=\"22000\"", content)
+              content = re.sub(r"targetRuntime=\"iOS\.CocoaTouch\.[0-9\.]+\"", "targetRuntime=\"iOS.CocoaTouch\"", content)
+              content = re.sub(r"version=\"18\.1\"", "version=\"18.0\"", content)
+              content = re.sub(r"18\.1", "18.0", content)
               with open(path, "w") as f:
                   f.write(content)
           '
@@ -70,7 +69,6 @@ jobs:
                      -configuration Release \
                      -sdk iphoneos \
                      -archivePath "$(pwd)/build/SchoolApp.xcarchive" \
-                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
