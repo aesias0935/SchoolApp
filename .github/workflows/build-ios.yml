@@ -73,7 +73,6 @@ jobs:
           rm -rf Payload app-unsigned.ipa
           mkdir -p Payload
 
-          # 1. SchoolApp.app 경로 탐색
           APP_PATH=$(find ios -name "SchoolApp.app" -type d | head -n 1)
 
           if [ -z "$APP_PATH" ]; then
@@ -83,17 +82,24 @@ jobs:
 
           echo "✅ Found App bundle at: $APP_PATH"
 
-          # 2. Info.plist 존재 여부 확인 및 자동 복사 (Sideloadly 대응)
+          # Info.plist가 없으면 복사
           if [ ! -f "$APP_PATH/Info.plist" ]; then
-            echo "⚠️ Info.plist missing in app bundle. Injecting Info.plist..."
             PLIST_SRC=$(find ios -name "Info.plist" | grep -v "Pods" | head -n 1)
             if [ -n "$PLIST_SRC" ]; then
               cp "$PLIST_SRC" "$APP_PATH/Info.plist"
-              echo "✅ Info.plist injected from: $PLIST_SRC"
             fi
           fi
 
-          # 3. IPA 압축
+          # CFBundleIdentifier 변수를 실제 Bundle ID로 강제 치환 (Sideloadly 오류 해결)
+          PLIST_FILE="$APP_PATH/Info.plist"
+          if [ -f "$PLIST_FILE" ]; then
+            echo "🔧 Fixing CFBundleIdentifier in Info.plist..."
+            plutil -replace CFBundleIdentifier -string "com.aesias.SchoolApp" "$PLIST_FILE"
+            plutil -replace CFBundleExecutable -string "SchoolApp" "$PLIST_FILE" 2>/dev/null || true
+            plutil -replace CFBundleName -string "SchoolApp" "$PLIST_FILE" 2>/dev/null || true
+            echo "✅ BundleIdentifier set to: com.aesias.SchoolApp"
+          fi
+
           cp -R "$APP_PATH" Payload/
           zip -r app-unsigned.ipa Payload
 
