@@ -19,11 +19,6 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
-      - name: Install iOS Pods
-        run: |
-          cd ios
-          pod install
-
       - name: Build Xcode Archive
         run: |
           cd ios
