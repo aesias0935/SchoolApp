@@ -31,7 +31,11 @@ yarn-error.*
 *.pem
 
 # local env files
+# .gitignore 파일 내부
+.env
 .env*.local
+node_modules/
+.expo/
 
 # typescript
 *.tsbuildinfo
