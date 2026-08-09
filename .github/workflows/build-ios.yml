@@ -5,17 +5,17 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Xcode 16.1
+      - name: Set up Xcode 15.4
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '16.1'
+          xcode-version: '15.4'
 
       - uses: actions/setup-node@v4
         with:
@@ -27,16 +27,10 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
-      - name: Force iOS Deployment Target to 15.0
-        run: |
-          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 15.0/g' ios/SchoolApp.xcodeproj/project.pbxproj
-          find ios -name "*.storyboard" -exec sed -i '' 's/targetRuntime="iOS.CocoaTouch" targetVersion="[0-9.]*"/targetRuntime="iOS.CocoaTouch" targetVersion="15.0"/g' {} +
-          find ios -name "*.storyboard" -exec sed -i '' 's/deployment="[0-9.]*"/deployment="15.0"/g' {} +
-
       - name: Install Pods
         run: npx pod-install ios
 
-      - name: Disable Code Signing and Fix Settings for Pods
+      - name: Disable Code Signing for Pods
         run: |
           sudo gem install xcodeproj
           ruby -r xcodeproj -e '
@@ -45,7 +39,6 @@ jobs:
               target.build_configurations.each do |config|
                 config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
                 config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
-                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.0"
               end
             end
             project.save
@@ -67,8 +60,6 @@ jobs:
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
                      COMPILER_INDEX_STORE_ENABLE=NO \
-                     IPHONEOS_DEPLOYMENT_TARGET=15.0 \
-                     ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS=NO \
                      archive | tee xcodebuild.log || {
                        echo "==================== LAST BUILD LOGS ===================="
                        tail -n 120 xcodebuild.log
