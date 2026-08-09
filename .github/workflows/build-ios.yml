@@ -5,10 +5,13 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Select Xcode 16.1
+        run: sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -24,18 +27,32 @@ jobs:
       - name: Install Pods
         run: npx pod-install ios
 
-      - name: Disable Code Signing for Pods
+      - name: Align Deployment Targets & Disable Code Signing
         run: |
           sudo gem install xcodeproj
           ruby -r xcodeproj -e '
-            project = Xcodeproj::Project.open("ios/Pods/Pods.xcodeproj")
-            project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
-                config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+            ["ios/SchoolApp.xcodeproj", "ios/Pods/Pods.xcodeproj"].each do |path|
+              next unless File.exist?(path)
+              project = Xcodeproj::Project.open(path)
+              project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings["CODE_SIGNING_ALLOWED"] = "NO"
+                  config.build_settings["CODE_SIGNING_REQUIRED"] = "NO"
+                  config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "16.0"
+                end
               end
+              project.save
             end
-            project.save
+          '
+
+      - name: Patch Storyboard Version Conflicts
+        run: |
+          ruby -e '
+            Dir.glob("ios/**/*.storyboard").each do |f|
+              content = File.read(f, encoding: "UTF-8")
+              new_content = content.gsub("18.1", "16.0")
+              File.write(f, new_content)
+            end
           '
 
       - name: Build Unsigned App
@@ -54,13 +71,8 @@ jobs:
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
-                     build 2>&1 | tee xcodebuild.log || {
-                       echo "### ❌ Xcode Build Error Logs" >> $GITHUB_STEP_SUMMARY
-                       echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                       tail -n 35 xcodebuild.log >> $GITHUB_STEP_SUMMARY
-                       echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                       exit 1
-                     }
+                     IPHONEOS_DEPLOYMENT_TARGET=16.0 \
+                     build
 
       - name: Package Unsigned IPA
         run: |
