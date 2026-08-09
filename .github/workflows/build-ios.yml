@@ -5,24 +5,38 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci || npm install
+
+      - name: Setup Expo
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+          packager: npm
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform ios
+        run: npx expo prebuild --platform ios --clean
 
       - name: Build Xcode Archive
         run: |
           cd ios
-          xcodebuild -workspace *.xcworkspace -scheme $(ls *.xcworkspace | cut -d. -f1) -configuration Release -sdk iphoneos -archivePath build/App.xcarchive archive CODE_SIGNING_ALLOWED=NO
+          xcodebuild -workspace *.xcworkspace \
+                     -scheme $(ls *.xcworkspace | cut -d. -f1) \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -archivePath build/App.xcarchive \
+                     archive \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO
 
       - name: Package Unsigned IPA
         run: |
