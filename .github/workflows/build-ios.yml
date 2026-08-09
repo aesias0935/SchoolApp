@@ -28,8 +28,8 @@ jobs:
 
       - name: Fix iOS 18.1 SDK Missing Error (Force target to 16.0)
         run: |
-          find ios -type f -exec sed -i '' 's/18\.1/16.0/g' {} +
-          find ios -type f -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} +
+          LC_ALL=C find ios -type f \( -name "*.pbxproj" -o -name "*.storyboard" -o -name "*.plist" -o -name "*.xcworkspacedata" \) -exec sed -i '' 's/18\.1/16.0/g' {} +
+          LC_ALL=C find ios -type f -name "*.pbxproj" -exec sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*/IPHONEOS_DEPLOYMENT_TARGET = 16.0/g' {} +
 
       - name: Install Pods
         run: npx pod-install ios
