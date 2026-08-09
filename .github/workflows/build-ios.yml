@@ -30,23 +30,23 @@ jobs:
       - name: Install Pods
         run: npx pod-install ios
 
-      - name: Build Xcode Archive
+      - name: Build Unsigned App
         run: |
           cd ios
           xcodebuild -workspace SchoolApp.xcworkspace \
                      -scheme SchoolApp \
                      -configuration Release \
                      -sdk iphoneos \
-                     -archivePath build/App.xcarchive \
-                     archive \
+                     -derivedDataPath output \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
-                     CODE_SIGN_IDENTITY=""
+                     CODE_SIGN_IDENTITY="" \
+                     PROVISIONING_PROFILE_SPECIFIER=""
 
       - name: Package Unsigned IPA
         run: |
           mkdir -p Payload
-          cp -r ios/build/App.xcarchive/Products/Applications/*.app Payload/
+          cp -r ios/output/Build/Products/Release-iphoneos/*.app Payload/
           zip -r app-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
