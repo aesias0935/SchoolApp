@@ -41,7 +41,7 @@ jobs:
             project.save
           '
 
-      - name: Build Unsigned Archive
+      - name: Build Unsigned App
         run: |
           cd ios
           set -o pipefail
@@ -49,14 +49,14 @@ jobs:
                      -scheme SchoolApp \
                      -configuration Release \
                      -sdk iphoneos \
-                     -archivePath output/SchoolApp.xcarchive \
+                     -derivedDataPath build \
                      CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
                      PROVISIONING_PROFILE_SPECIFIER="" \
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
-                     archive | tee xcodebuild.log || {
+                     build | tee xcodebuild.log || {
                        echo "==================== LAST BUILD LOGS ===================="
                        tail -n 120 xcodebuild.log
                        exit 1
@@ -65,7 +65,7 @@ jobs:
       - name: Package Unsigned IPA
         run: |
           mkdir -p Payload
-          cp -r ios/output/SchoolApp.xcarchive/Products/Applications/*.app Payload/
+          cp -r ios/build/Build/Products/Release-iphoneos/*.app Payload/
           zip -r app-unsigned.ipa Payload
 
       - name: Upload IPA Artifact
