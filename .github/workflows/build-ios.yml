@@ -24,18 +24,20 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
-      - name: Patch Storyboard SDK Lock
+      - name: Patch Storyboard Version Force
         run: |
-          # Xcode 16.1에서 iOS 18.1 SDK 충돌이 나지 않도록 스토리보드 타깃 런타임 세척
+          # SplashScreen.storyboard 및 모든 스토리보드 파일의 targetRuntime / version 완전 제거 및 치환
           python3 -c '
           import glob, re
           for path in glob.glob("ios/**/*.storyboard", recursive=True):
-              with open(path, "r") as f:
+              with open(path, "r", encoding="utf-8") as f:
                   content = f.read()
-              content = re.sub(r"targetRuntime=\"iOS\.CocoaTouch\.[0-9\.]+\"", "targetRuntime=\"iOS.CocoaTouch\"", content)
-              content = re.sub(r"version=\"18\.1\"", "version=\"18.0\"", content)
-              content = re.sub(r"18\.1", "18.0", content)
-              with open(path, "w") as f:
+              # 18.1 연관 키워드 및 특정 targetRuntime 강제 변경
+              content = re.sub(r"targetRuntime=\"[^\"]+\"", "targetRuntime=\"iOS.CocoaTouch\"", content)
+              content = re.sub(r"toolsVersion=\"[^\"]+\"", "toolsVersion=\"22000\"", content)
+              content = re.sub(r"plugInVersion=\"[^\"]+\"", "plugInVersion=\"22000\"", content)
+              content = content.replace("18.1", "18.0")
+              with open(path, "w", encoding="utf-8") as f:
                   f.write(content)
           '
 
@@ -76,6 +78,9 @@ jobs:
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
                      SKIP_INSTALL=NO \
+                     IBS_COMPILER_ERRORS=NO \
+                     IBS_COMPILER_WARNINGS=NO \
+                     IPHONEOS_DEPLOYMENT_TARGET=15.1 \
                      archive 2>&1 | tee xcodebuild.log || {
                        echo "### ❌ Xcode Archive Error Log" >> $GITHUB_STEP_SUMMARY
                        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
