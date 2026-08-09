@@ -27,6 +27,11 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
+      - name: Fix Storyboard Deployment Target
+        run: |
+          find ios -name "*.storyboard" -exec sed -i '' 's/targetRuntime="iOS.CocoaTouch" targetVersion="[0-9.]*"/targetRuntime="iOS.CocoaTouch" targetVersion="15.0"/g' {} +
+          find ios -name "*.storyboard" -exec sed -i '' 's/deployment="[0-9.]*"/deployment="15.0"/g' {} +
+
       - name: Install Pods
         run: npx pod-install ios
 
@@ -60,6 +65,7 @@ jobs:
                      DEVELOPMENT_TEAM="" \
                      CODE_SIGN_STYLE=Manual \
                      COMPILER_INDEX_STORE_ENABLE=NO \
+                     IPHONEOS_DEPLOYMENT_TARGET=15.0 \
                      archive | tee xcodebuild.log || {
                        echo "==================== LAST BUILD LOGS ===================="
                        tail -n 120 xcodebuild.log
