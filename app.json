@@ -64,7 +64,8 @@
         "@bacons/apple-targets",
         {
           "type": "widget",
-          "name": "SchoolAppWidget"
+          "name": "SchoolAppWidget",
+          "framework": "widgetkit"
         }
       ]
     ],
