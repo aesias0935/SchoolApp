@@ -1,3 +1,4 @@
+import { syncSavedTimetableToWidget } from '@/services/comtime';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
@@ -14,9 +15,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import SharedGroupPreferences from 'react-native-shared-group-preferences';
 import { WebView } from 'react-native-webview';
 import { getSavedNews, toggleSaveNews } from '../../services/bookmark';
 
+const APP_GROUP = 'group.com.aesias.SchoolApp';
 const SCHOOL_LIST = ['수원하이텍마이스터고등학교'];
 const GRADE_LIST = ['1학년', '2학년', '3학년'];
 const CLASS_LIST = ['1반', '2반', '3반', '4반', '5반', '6반', '7반', '8반'];
@@ -88,32 +91,42 @@ export default function SettingScreen() {
     }
   };
 
-  const saveData = async () => {
-    if (!name.trim()) {
-      Alert.alert('알림', '이름을 입력해주세요!');
-      return;
-    }
-    if (!school || !grade || !classNum || !major) {
-      Alert.alert('알림', '모든 학교 정보를 선택해주세요!');
-      return;
-    }
+const saveData = async () => {
+  if (!name.trim()) {
+    Alert.alert('알림', '이름을 입력해주세요!');
+    return;
+  }
+  if (!school || !grade || !classNum || !major) {
+    Alert.alert('알림', '모든 학교 정보를 선택해주세요!');
+    return;
+  }
 
-    try {
-      await AsyncStorage.setItem('@user_name', name);
-      await AsyncStorage.setItem('@school_name', school);
-      await AsyncStorage.setItem('@grade', grade);
-      await AsyncStorage.setItem('@class_num', classNum);
-      await AsyncStorage.setItem('@major', major);
+  try {
+    await AsyncStorage.setItem('@user_name', name);
+    await AsyncStorage.setItem('@school_name', school);
+    await AsyncStorage.setItem('@grade', grade);
+    await AsyncStorage.setItem('@class_num', classNum);
+    await AsyncStorage.setItem('@major', major);
 
-      const fullClassInfo = `${grade} ${classNum} ${major}`.trim();
-      await AsyncStorage.setItem('@grade_class', fullClassInfo);
+    const fullClassInfo = `${grade} ${classNum} ${major}`.trim();
+    await AsyncStorage.setItem('@grade_class', fullClassInfo);
 
-      setIsRegistered(true);
-      Alert.alert('저장 완료', '맞춤 설정이 성공적으로 저장되었습니다!');
-    } catch (e) {
-      Alert.alert('저장 실패', '문제가 발생했습니다.');
-    }
-  };
+    // 📌 App Group 프로필 데이터 공유
+    await SharedGroupPreferences.setItem(
+      'userProfile',
+      { name, school, grade, classNum, major },
+      APP_GROUP
+    );
+
+    // 📌 컴시간 시간표 동기화 실행
+    await syncSavedTimetableToWidget();
+
+    setIsRegistered(true);
+    Alert.alert('저장 완료', '맞춤 설정이 성공적으로 저장되었습니다!');
+  } catch (e) {
+    Alert.alert('저장 실패', '문제가 발생했습니다.');
+  }
+};
 
   const resetData = async () => {
     Alert.alert('정보 수정', '내 정보를 다시 설정하시겠습니까?', [
@@ -129,6 +142,10 @@ export default function SettingScreen() {
             '@major',
             '@grade_class',
           ]);
+
+          // 📌 App Group 데이터 초기화
+          await SharedGroupPreferences.setItem('userProfile', null, APP_GROUP);
+
           setIsRegistered(false);
           setName('');
           setSchool('');

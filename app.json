@@ -11,8 +11,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.aesias.SchoolApp",
+      "appleTeamId": "A1B2C3D4E5",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.aesias.SchoolApp"
+        ]
+      },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSupportsLiveActivities": true
       }
     },
     "android": {
@@ -23,7 +30,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.aesias.SchoolApp"
     },
     "web": {
       "output": "static",
@@ -50,6 +58,13 @@
           "ios": {
             "deploymentTarget": "16.0"
           }
+        }
+      ],
+      [
+        "@bacons/apple-targets",
+        {
+          "type": "widget",
+          "name": "SchoolAppWidget"
         }
       ]
     ],

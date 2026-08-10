@@ -1,3 +1,5 @@
+import { registerTimetableAutoRefresh, syncSavedTimetableToWidget } from '@/services/comtime';
+import { updateHomeWidgetData } from '@/services/widget'; // 기존 파일 경로
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -15,6 +17,19 @@ const PERIOD_TIMES = [
 ];
 
 export default function HomeScreen() {
+  useEffect(() => {
+    // 📌 화면이 렌더링될 때 시간표 동기화 실행
+    syncSavedTimetableToWidget();
+    
+    // 원하신다면 앱 상태 변경(포그라운드/백그라운드) 감지 리스너를 달아서
+    // 앱으로 돌아올 때마다 갱신하게 할 수도 있습니다.
+    const unregister = registerTimetableAutoRefresh();
+
+    return () => {
+      unregister(); // 화면 언마운트 시 정리
+    };
+  }, []);
+  
   const router = useRouter();
 
   const [school, setSchool] = useState('수원하이텍마이스터고등학교');
@@ -68,18 +83,27 @@ export default function HomeScreen() {
       const lastLoginDate = await AsyncStorage.getItem('@last_login_date');
       const savedDailyTodos = await AsyncStorage.getItem('@daily_todos');
 
-      if (savedDailyTodos) {
+  if (savedDailyTodos) {
         const parsedTodos = JSON.parse(savedDailyTodos);
         if (lastLoginDate !== todayStr) {
           const resetTodos = parsedTodos.map((item: any) => ({ ...item, completed: false }));
           setDailyTodos(resetTodos);
           await AsyncStorage.setItem('@daily_todos', JSON.stringify(resetTodos));
           await AsyncStorage.setItem('@last_login_date', todayStr);
+
+          // 📌 날짜가 바뀌어 초기화된 To-Do를 위젯에 반영
+          updateHomeWidgetData(resetTodos);
         } else {
           setDailyTodos(parsedTodos);
+
+          // 📌 앱 실행 시 저장되어 있던 To-Do를 위젯에 반영
+          updateHomeWidgetData(parsedTodos);
         }
       } else {
         await AsyncStorage.setItem('@last_login_date', todayStr);
+
+        // 📌 할 일이 없을 때 빈 상태로 위젯 초기화
+        updateHomeWidgetData([]);
       }
 
       const savedLongTerm = await AsyncStorage.getItem('@longterm_goals');
@@ -121,78 +145,85 @@ export default function HomeScreen() {
 
   // 실시간 타이머 및 현재/다음 교시 계산 (1초마다 갱신)
   useEffect(() => {
-    const updateTimerAndSchedule = async () => {
-      const now = new Date();
-      const currentHour = now.getHours();
-      const currentMin = now.getMinutes();
-      const currentTotalMin = currentHour * 60 + currentMin;
+  let lastSyncedMin = -1; // 마지막 동기화된 "분" 저장용 변수
 
-      const dayIndex = now.getDay(); // 1: 월 ~ 5: 금
-      if (dayIndex < 1 || dayIndex > 5) {
-        setStatusTitle('☕ 주말입니다. 편안한 휴식 되세요!');
-        setStatusTimer('');
-        setNextSubjectInfo('월요일에 만나요!');
-        return;
-      }
+  const updateTimerAndSchedule = async () => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMin = now.getMinutes();
+    const currentTotalMin = currentHour * 60 + currentMin;
 
-      const dayMap: Record<number, string> = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금' };
-      const currentDayStr = dayMap[dayIndex];
+    // 📌 [추가] 분이 바뀔 때마다 App Group 위젯 & Live Activity 데이터 동기화 (1초마다 native 호출 방지)
+    if (lastSyncedMin !== currentMin) {
+      lastSyncedMin = currentMin;
+      syncSavedTimetableToWidget();
+    }
 
-      const savedSchedule = await AsyncStorage.getItem('@current_week_schedule');
-      const scheduleMap = savedSchedule ? JSON.parse(savedSchedule) : {
-        '월': [], '화': [], '수': [], '목': [], '금': []
-      };
+    const dayIndex = now.getDay(); // 1: 월 ~ 5: 금
+    if (dayIndex < 1 || dayIndex > 5) {
+      setStatusTitle('☕ 주말입니다. 편안한 휴식 되세요!');
+      setStatusTimer('');
+      setNextSubjectInfo('월요일에 만나요!');
+      return;
+    }
 
-      const subjects = scheduleMap[currentDayStr] || [];
+    const dayMap: Record<number, string> = { 1: '월', 2: '화', 3: '수', 4: '목', 5: '금' };
+    const currentDayStr = dayMap[dayIndex];
 
-      let foundTitle = '방과후 / 일과 종료';
-      let foundTimer = '';
-      let nextSub = '다음 일정 없음';
-
-      for (let i = 0; i < PERIOD_TIMES.length; i++) {
-        const p = PERIOD_TIMES[i];
-        const [startH, startM] = p.start.split(':').map(Number);
-        const [endH, endM] = p.end.split(':').map(Number);
-        
-        const startTotalMin = startH * 60 + startM;
-        const endTotalMin = endH * 60 + endM;
-        const currentSubName = subjects[i] || `${p.period}교시`;
-
-        if (currentTotalMin >= startTotalMin && currentTotalMin <= endTotalMin) {
-          const leftMin = endTotalMin - currentTotalMin;
-          foundTitle = `🔥 현재 ${p.period}교시 (${currentSubName})`;
-          foundTimer = `종료까지 ${leftMin}분 남음`;
-
-          if (i < subjects.length - 1) {
-            nextSub = `다음: ${i + 2}교시 (${subjects[i + 1]})`;
-          } else {
-            nextSub = '오늘의 마지막 수업입니다!';
-          }
-          break;
-        } else if (i < PERIOD_TIMES.length - 1) {
-          const [nextStartH, nextStartM] = PERIOD_TIMES[i + 1].start.split(':').map(Number);
-          const nextStartTotalMin = nextStartH * 60 + nextStartM;
-
-          if (currentTotalMin > endTotalMin && currentTotalMin < nextStartTotalMin) {
-            const leftMin = nextStartTotalMin - currentTotalMin;
-            foundTitle = `☕ 쉬는 시간 (${p.period}교시 쉬는 중)`;
-            foundTimer = `${p.period + 1}교시까지 ${leftMin}분 전`;
-            nextSub = `다음: ${i + 2}교시 (${subjects[i + 1]})`;
-            break;
-          }
-        }
-      }
-
-      setStatusTitle(foundTitle);
-      setStatusTimer(foundTimer);
-      setNextSubjectInfo(nextSub);
+    const savedSchedule = await AsyncStorage.getItem('@current_week_schedule');
+    const scheduleMap = savedSchedule ? JSON.parse(savedSchedule) : {
+      '월': [], '화': [], '수': [], '목': [], '금': []
     };
 
-    updateTimerAndSchedule();
-    const timer = setInterval(updateTimerAndSchedule, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    const subjects = scheduleMap[currentDayStr] || [];
 
+    let foundTitle = '방과후 / 일과 종료';
+    let foundTimer = '';
+    let nextSub = '다음 일정 없음';
+
+    for (let i = 0; i < PERIOD_TIMES.length; i++) {
+      const p = PERIOD_TIMES[i];
+      const [startH, startM] = p.start.split(':').map(Number);
+      const [endH, endM] = p.end.split(':').map(Number);
+      
+      const startTotalMin = startH * 60 + startM;
+      const endTotalMin = endH * 60 + endM;
+      const currentSubName = subjects[i] || `${p.period}교시`;
+
+      if (currentTotalMin >= startTotalMin && currentTotalMin <= endTotalMin) {
+        const leftMin = endTotalMin - currentTotalMin;
+        foundTitle = `🔥 현재 ${p.period}교시 (${currentSubName})`;
+        foundTimer = `종료까지 ${leftMin}분 남음`;
+
+        if (i < subjects.length - 1) {
+          nextSub = `다음: ${i + 2}교시 (${subjects[i + 1]})`;
+        } else {
+          nextSub = '오늘의 마지막 수업입니다!';
+        }
+        break;
+      } else if (i < PERIOD_TIMES.length - 1) {
+        const [nextStartH, nextStartM] = PERIOD_TIMES[i + 1].start.split(':').map(Number);
+        const nextStartTotalMin = nextStartH * 60 + nextStartM;
+
+        if (currentTotalMin > endTotalMin && currentTotalMin < nextStartTotalMin) {
+          const leftMin = nextStartTotalMin - currentTotalMin;
+          foundTitle = `☕ 쉬는 시간 (${p.period}교시 쉬는 중)`;
+          foundTimer = `${p.period + 1}교시까지 ${leftMin}분 전`;
+          nextSub = `다음: ${i + 2}교시 (${subjects[i + 1]})`;
+          break;
+        }
+      }
+    }
+
+    setStatusTitle(foundTitle);
+    setStatusTimer(foundTimer);
+    setNextSubjectInfo(nextSub);
+  };
+
+  updateTimerAndSchedule();
+  const timer = setInterval(updateTimerAndSchedule, 1000);
+  return () => clearInterval(timer);
+}, []);
   const saveDailyToStorage = async (newTodos: typeof dailyTodos) => {
     setDailyTodos(newTodos);
     await AsyncStorage.setItem('@daily_todos', JSON.stringify(newTodos));
