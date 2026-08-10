@@ -3,8 +3,8 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-const Comci = require('comci-parser');
-const comci = new Comci();
+// 📌 기존 comci-parser 제거 후 서비스 모듈 연동
+import { syncSavedTimetableToWidget } from '../../services/comtime';
 
 export default function ScheduleScreen() {
   const router = useRouter();
@@ -29,6 +29,7 @@ export default function ScheduleScreen() {
   );
 
   const loadInfoAndSchedule = async () => {
+    setLoading(true);
     try {
       const savedSchool = await AsyncStorage.getItem('@school_name');
       const savedGrade = await AsyncStorage.getItem('@grade');
@@ -47,47 +48,22 @@ export default function ScheduleScreen() {
         major: majorClean,
       });
 
-      await fetchComciSchedule(schoolClean, gradeClean, classClean);
+      // 1. 저장되어 있는 주간 시간표 데이터 로드
+      const savedSchedule = await AsyncStorage.getItem('@current_week_schedule');
+      if (savedSchedule) {
+        setScheduleMap(JSON.parse(savedSchedule));
+      }
+
+      // 2. 시간표 & 위젯 최신 데이터 동기화 함수 호출
+      await syncSavedTimetableToWidget();
+
+      // 동기화 후 업데이트된 스토리지 재로드
+      const updatedSchedule = await AsyncStorage.getItem('@current_week_schedule');
+      if (updatedSchedule) {
+        setScheduleMap(JSON.parse(updatedSchedule));
+      }
     } catch (e) {
       console.log('시간표 초기화 실패:', e);
-    }
-  };
-
-  const fetchComciSchedule = async (schoolName: string, grade: string, classNum: string) => {
-    setLoading(true);
-    try {
-      await comci.init();
-      const searchResult = await comci.searchSchool(schoolName);
-      
-      if (!searchResult || searchResult.length === 0) {
-        throw new Error('학교를 찾을 수 없습니다.');
-      }
-
-      const schoolCode = searchResult[0].code;
-      await comci.setSchool(schoolCode);
-
-      // 이번주 시간표 데이터 가져오기
-      const timetableData = await comci.getTimetable();
-      const gradeNum = parseInt(grade, 10);
-      const classNo = parseInt(classNum, 10);
-
-      // 컴시간 데이터 매핑 (1:월, 2:화, 3:수, 4:목, 5:금)
-      const dayMapNames = ['월', '화', '수', '목', '금'];
-      const newMap: Record<string, string[]> = { '월': [], '화': [], '수': [], '목': [], '금': [] };
-
-      if (timetableData && timetableData[gradeNum] && timetableData[gradeNum][classNo]) {
-        const classSchedule = timetableData[gradeNum][classNo];
-        
-        dayMapNames.forEach((dayStr, dayIndex) => {
-          const dayData = classSchedule[dayIndex] || [];
-          newMap[dayStr] = dayData.map((subject: any) => subject.subject || '수업 없음');
-        });
-      }
-
-      setScheduleMap(newMap);
-      await AsyncStorage.setItem('@current_week_schedule', JSON.stringify(newMap));
-    } catch (error) {
-      console.log('컴시간알리미 연동 실패:', error);
     } finally {
       setLoading(false);
     }
