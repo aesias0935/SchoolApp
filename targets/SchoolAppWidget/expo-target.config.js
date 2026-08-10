@@ -6,4 +6,9 @@ module.exports = {
     "com.apple.security.application-groups": ["group.com.aesias.SchoolApp"],
   },
   frameworks: ["ActivityKit", "WidgetKit", "SwiftUI"],
+  infoPlist: {
+    NSExtension: {
+      NSExtensionPointIdentifier: "com.apple.widgetkit-extension",
+    },
+  },
 };
