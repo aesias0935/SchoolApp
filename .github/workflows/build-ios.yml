@@ -5,13 +5,13 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14  # 📌 SDK가 사전 빌드되어 가장 안정적인 macos-14 환경 사용
+    runs-on: macos-15  # 📌 Xcode 16 지원을 위해 macos-15 사용
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 15.4
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+      - name: Select Xcode 16.0
+        run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
