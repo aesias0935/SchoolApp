@@ -5,18 +5,13 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14  # 📌 SDK가 사전 빌드되어 가장 안정적인 macos-14 환경 사용
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Select Xcode 16.1
-        run: sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
-
-      - name: Download iOS 18.1 Platform SDK
-        run: |
-          echo "Downloading iOS 18.1 Platform SDK..."
-          sudo xcodebuild -downloadPlatform iOS || true
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
