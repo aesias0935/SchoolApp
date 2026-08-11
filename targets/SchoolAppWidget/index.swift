@@ -19,7 +19,6 @@ struct SimpleEntry: TimelineEntry {
 }
 
 struct Provider: TimelineProvider {
-    // 위젯 갤러리/미리보기에서 보여줄 스켈레톤 상태
     func placeholder(in context: Context) -> SimpleEntry {
         SimpleEntry(date: Date(), progressRate: 0, todos: [])
     }
@@ -30,10 +29,9 @@ struct Provider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> ()) {
-        // App Group에서 사용자가 실제로 등록한 데이터 읽기
         let userDefaults = UserDefaults(suiteName: "group.com.aesias.SchoolApp")
         let progress = userDefaults?.integer(forKey: "progressRate") ?? 0
-        let todos = userDefaults?.stringArray(forKey: "todos") ?? [] // 기본값: 빈 배열
+        let todos = userDefaults?.stringArray(forKey: "todos") ?? []
 
         let entry = SimpleEntry(date: Date(), progressRate: progress, todos: todos)
         let timeline = Timeline(entries: [entry], policy: .atEnd)
@@ -41,7 +39,7 @@ struct Provider: TimelineProvider {
     }
 }
 
-// MARK: - 3. Home Widget View
+// MARK: - 3. Home Widget View (iOS 17 containerBackground 적용)
 struct SchoolAppWidgetEntryView : View {
     var entry: Provider.Entry
 
@@ -84,6 +82,10 @@ struct SchoolAppWidgetEntryView : View {
             }
         }
         .padding()
+        // ⭕ iOS 17 이상 필수 배경 API 처리
+        .containerBackground(for: .widget) {
+            Color(.systemBackground)
+        }
     }
 }
 
@@ -123,6 +125,7 @@ struct TimetableLiveActivity: Widget {
                     .font(.title3).bold().foregroundColor(.blue)
             }
             .padding()
+            .activityBackgroundTint(Color(.systemBackground))
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
