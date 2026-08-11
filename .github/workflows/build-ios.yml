@@ -92,7 +92,7 @@ jobs:
 
           cp -R "$ARCHIVE_APP" Payload/
 
-          # 1. 메인 앱 Info.plist 수정
+          # 1. 메인 앱 Info.plist 설정
           PLIST_FILE="Payload/SchoolApp.app/Info.plist"
           if [ -f "$PLIST_FILE" ]; then
             plutil -replace CFBundleIdentifier -string "com.aesias.SchoolApp" "$PLIST_FILE"
@@ -102,18 +102,22 @@ jobs:
             plutil -replace CFBundlePackageType -string "APPL" "$PLIST_FILE" 2>/dev/null || true
           fi
 
-          # 2. 위젯 Extension Info.plist 강제 주입 (WidgetKit 표준 규격 적용)
-          WIDGET_PLIST="Payload/SchoolApp.app/PlugIns/SchoolAppWidget.appex/Info.plist"
-          if [ -f "$WIDGET_PLIST" ]; then
-            echo "🔧 Fixing Widget Info.plist for WidgetKit..."
+          # 2. 모든 PlugIns(위젯) Info.plist를 WidgetKit 확장 규격으로 변환
+          find Payload/SchoolApp.app/PlugIns -name "Info.plist" 2>/dev/null | while read -r WIDGET_PLIST; do
+            echo "🔧 Fixing Widget Info.plist at: $WIDGET_PLIST"
+            
+            # 잘못된 구형 스토리보드/클래스 키 삭제
+            plutil -remove NSExtension.NSExtensionPrincipalClass "$WIDGET_PLIST" 2>/dev/null || true
+            plutil -remove NSExtension.NSExtensionMainStoryboard "$WIDGET_PLIST" 2>/dev/null || true
+            
+            # WidgetKit 필수 식별자 주입
             plutil -replace NSExtension -xml '<dict><key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string></dict>' "$WIDGET_PLIST"
-          fi
+            
+            echo "📄 Updated Info.plist Content:"
+            plutil -p "$WIDGET_PLIST"
+          done
 
           zip -r app-unsigned.ipa Payload
-
-      - name: Upload IPA Artifact
-        run: |
-          echo "Packaging completed successfully!"
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
